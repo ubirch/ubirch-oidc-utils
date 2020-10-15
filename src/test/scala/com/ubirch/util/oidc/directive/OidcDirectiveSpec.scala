@@ -1,17 +1,19 @@
 package com.ubirch.util.oidc.directive
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{HttpHeader, StatusCodes}
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.{AuthorizationFailedRejection, Route}
+import akka.http.scaladsl.server.Directives.{complete, pathSingleSlash}
+import akka.http.scaladsl.server.{AuthorizationFailedRejection, Directives, Route}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.http.scaladsl.{Http, HttpExt}
+import com.github.sebruck.EmbeddedRedis
 import com.ubirch.util.oidc.config.{OidcUtilsConfig, OidcUtilsConfigKeys}
 import com.ubirch.util.oidc.model.UserContext
 import com.ubirch.util.oidc.util.OidcUtil
 import com.ubirch.util.redis.RedisClientUtil
 import com.ubirch.util.redis.test.RedisCleanup
-import java.util.UUID
 import org.json4s.native.Serialization.write
 import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
 import redis.RedisClient
@@ -24,7 +26,7 @@ import scala.language.postfixOps
   * author: cvandrei
   * since: 2017-03-21
   */
-class OidcDirectiveSpec extends FeatureSpec
+class OidcDirectiveSpec extends FeatureSpec with EmbeddedRedis
   with ScalatestRouteTest
   with Matchers
   with BeforeAndAfterEach
@@ -47,7 +49,7 @@ class OidcDirectiveSpec extends FeatureSpec
   import oidcDirective._
 
   val testRoute: Route =
-    get {
+    Directives.get {
       pathSingleSlash {
         oidcToken2UserContext { userContext =>
           complete(s"context=${userContext.context}; userId=${userContext.externalUserId}")
@@ -58,61 +60,61 @@ class OidcDirectiveSpec extends FeatureSpec
   feature("oidcToken2UserContext") {
 
     scenario("with all headers but token does not exist") {
+      withRedis(6379) { _ =>
+        // prepare
+        val authorizationHeader: HttpHeader = Authorization(OAuth2BearerToken("some-token"))
 
-      // prepare
-      val authorizationHeader: HttpHeader = Authorization(OAuth2BearerToken("some-token"))
+        // test
+        Get().withHeaders(authorizationHeader) ~> testRoute ~> check {
 
-      // test
-      Get().withHeaders(authorizationHeader) ~> testRoute ~> check {
-
-        // verify
-        handled shouldBe false
-        rejection shouldEqual AuthorizationFailedRejection
+          // verify
+          handled shouldBe false
+          rejection shouldEqual AuthorizationFailedRejection
 
       }
-
+      }
     }
 
     scenario("with Authorization header and token exists") {
+      withRedis(6379) { _ =>
+        // prepare
+        val context = "some-context"
+        val token = "some-token"
+        val providerId = "some-provider-id"
+        val userId = UUID.randomUUID()
+        val userName = "Jane Doe"
+        val locale = "en"
+        val externalId = "some-external-id"
 
-      // prepare
-      val context = "some-context"
-      val token = "some-token"
-      val providerId = "some-provider-id"
-      val userId = UUID.randomUUID()
-      val userName = "Jane Doe"
-      val locale = "en"
-      val externalId = "some-external-id"
+        val initialTtl = 10L
+        val refreshTtl = OidcUtilsConfig.redisUpdateExpirySeconds()
 
-      val initialTtl = 10L
-      val refreshTtl = OidcUtilsConfig.redisUpdateExpirySeconds()
+        val redisKey = OidcUtil.tokenToHashedKey(token)
+        val redisValue = write(UserContext(
+          context = context,
+          providerId = providerId,
+          externalUserId = externalId,
+          userName = userName,
+          locale = locale,
+          userId = userId,
+          hasPubKey = 1
+        ))
+        Await.result(redis.set(redisKey, redisValue, exSeconds = Some(initialTtl)), 2 seconds) shouldBe true
 
-      val redisKey = OidcUtil.tokenToHashedKey(token)
-      val redisValue = write(UserContext(
-        context = context,
-        providerId = providerId,
-        externalUserId = externalId,
-        userName = userName,
-        locale = locale,
-        userId = userId,
-        hasPubKey = 1
-      ))
-      Await.result(redis.set(redisKey, redisValue, exSeconds = Some(initialTtl)), 2 seconds) shouldBe true
+        val authorizationHeader: HttpHeader = Authorization(OAuth2BearerToken(token))
 
-      val authorizationHeader: HttpHeader = Authorization(OAuth2BearerToken(token))
+        // test
+        Get().withHeaders(authorizationHeader) ~> Route.seal(testRoute) ~> check {
 
-      // test
-      Get().withHeaders(authorizationHeader) ~> Route.seal(testRoute) ~> check {
+          // verify
+          status === StatusCodes.OK
+          responseAs[String] shouldEqual s"context=$context; userId=$externalId"
 
-        // verify
-        status === StatusCodes.OK
-        responseAs[String] shouldEqual s"context=$context; userId=$externalId"
+          Thread.sleep(2000)
+          Await.result(redis.ttl(redisKey), 2 seconds) should be < refreshTtl
 
-        Thread.sleep(2000)
-        Await.result(redis.ttl(redisKey), 2 seconds) should be < refreshTtl
-
+        }
       }
-
     }
 
     scenario("test case: without Authorization header") {

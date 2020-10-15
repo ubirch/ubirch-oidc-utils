@@ -175,6 +175,12 @@
             <version>${scalatest.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.github.sebruck</groupId>
+            <artifactId>scalatest-embedded-redis_${scala.major.version}</artifactId>
+            <version>0.2.0</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- Logging -->
 
