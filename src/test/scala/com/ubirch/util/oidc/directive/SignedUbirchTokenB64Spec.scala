@@ -5,9 +5,11 @@ import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.util.crypto.ecc.EccUtil
 import com.ubirch.util.redis.test.RedisCleanup
 import org.joda.time.{DateTime, DateTimeZone}
-import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.featurespec.AnyFeatureSpec
+import org.scalatest.matchers.should.Matchers
 
-class SignedUbirchTokenB64Spec extends FeatureSpec
+class SignedUbirchTokenB64Spec extends AnyFeatureSpec
   with ScalatestRouteTest
   with Matchers
   with BeforeAndAfterEach
@@ -15,7 +17,7 @@ class SignedUbirchTokenB64Spec extends FeatureSpec
   with StrictLogging {
 
   val eccUtil = new EccUtil
-  feature("basic test") {
+  Feature("basic test") {
 
     ignore("simple check token 0") {
       val (pubKeyB64, privKeyB64) = eccUtil.generateEccKeyPairEncoded
@@ -50,7 +52,7 @@ class SignedUbirchTokenB64Spec extends FeatureSpec
 
       tsInt shouldBe timestampLong
 
-      val tsDT = new DateTime(timestampLong * 1000l, DateTimeZone.UTC)
+      val tsDT = new DateTime(timestampLong * 1000L, DateTimeZone.UTC)
 
       new EccUtil().validateSignature(pubKeyB64, signatureB64, payload) shouldBe true
 

@@ -1,7 +1,5 @@
 package com.ubirch.util.oidc.directive
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{HttpHeader, StatusCodes}
 import akka.http.scaladsl.server.Directives.{complete, pathSingleSlash}
@@ -15,9 +13,12 @@ import com.ubirch.util.oidc.util.OidcUtil
 import com.ubirch.util.redis.RedisClientUtil
 import com.ubirch.util.redis.test.RedisCleanup
 import org.json4s.native.Serialization.write
-import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.featurespec.AnyFeatureSpec
+import org.scalatest.matchers.should.Matchers
 import redis.RedisClient
 
+import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -26,7 +27,7 @@ import scala.language.postfixOps
   * author: cvandrei
   * since: 2017-03-21
   */
-class OidcDirectiveSpec extends FeatureSpec with EmbeddedRedis
+class OidcDirectiveSpec extends AnyFeatureSpec with EmbeddedRedis
   with ScalatestRouteTest
   with Matchers
   with BeforeAndAfterEach
@@ -57,9 +58,9 @@ class OidcDirectiveSpec extends FeatureSpec with EmbeddedRedis
       }
     }
 
-  feature("oidcToken2UserContext") {
+  Feature("oidcToken2UserContext") {
 
-    scenario("with all headers but token does not exist") {
+    Scenario("with all headers but token does not exist") {
       withRedis(6379) { _ =>
         // prepare
         val authorizationHeader: HttpHeader = Authorization(OAuth2BearerToken("some-token"))
@@ -75,7 +76,7 @@ class OidcDirectiveSpec extends FeatureSpec with EmbeddedRedis
       }
     }
 
-    scenario("with Authorization header and token exists") {
+    Scenario("with Authorization header and token exists") {
       withRedis(6379) { _ =>
         // prepare
         val context = "some-context"
@@ -117,7 +118,7 @@ class OidcDirectiveSpec extends FeatureSpec with EmbeddedRedis
       }
     }
 
-    scenario("test case: without Authorization header") {
+    Scenario("test case: without Authorization header") {
 
       // test
       Get() ~> Route.seal(testRoute) ~> check {

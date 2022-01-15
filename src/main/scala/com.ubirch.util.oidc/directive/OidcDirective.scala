@@ -42,7 +42,7 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
   implicit private val formatter: Formats = JsonFormats.default
 
   private val envid = config.getString("ubirch.envid").toLowerCase
-  private val redis = RedisClientUtil.getRedisClient
+  private val redis = RedisClientUtil.getRedisClient()
   private val refreshIntervalSeconds = OidcUtilsConfig.redisUpdateExpirySeconds()
   private val skipEnvChecking = OidcUtilsConfig.skipEnvChecking()
   private val allowInvalidSignature = OidcUtilsConfig.allowInvalidSignature()
