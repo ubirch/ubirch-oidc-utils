@@ -22,7 +22,7 @@
 
     <groupId>com.ubirch.util</groupId>
     <artifactId>ubirch-oidc-utils_${scala.major.version}</artifactId>
-    <version>0.8.16-SNAPSHOT</version>
+    <version>0.8.16</version>
     <packaging>jar</packaging>
 
     <licenses>
@@ -77,12 +77,12 @@
         <scalatest.version>3.2.10</scalatest.version>
         <scalatest-embedded-redis.version>0.4.0</scalatest-embedded-redis.version>
 
-        <ubirch-crypto.version>0.5.4-SNAPSHOT</ubirch-crypto.version>
-        <ubirch-json.version>0.5.3-SNAPSHOT</ubirch-json.version>
-        <ubirch-redis.version>0.6.2-SNAPSHOT</ubirch-redis.version>
-        <ubirch-response.version>0.5.2-SNAPSHOT</ubirch-response.version>
-        <ubirch-id-service-client.version>0.6.6-SNAPSHOT</ubirch-id-service-client.version>
-        <ubirch-user-service-client.version>1.0.6-SNAPSHOT</ubirch-user-service-client.version>
+        <ubirch-crypto.version>0.5.4</ubirch-crypto.version>
+        <ubirch-json.version>0.5.3</ubirch-json.version>
+        <ubirch-redis.version>0.6.2</ubirch-redis.version>
+        <ubirch-response.version>0.5.2</ubirch-response.version>
+        <ubirch-id-service-client.version>0.6.6</ubirch-id-service-client.version>
+        <ubirch-user-service-client.version>1.0.6</ubirch-user-service-client.version>
 
         <akka-http.version>10.2.7</akka-http.version>
 
@@ -354,6 +354,19 @@
                 <configuration>
                     <skip>false</skip>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
