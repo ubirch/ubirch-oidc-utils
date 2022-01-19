@@ -1,43 +1,44 @@
 package com.ubirch.util.oidc.util
 
-import com.ubirch.crypto.PrivKeyEDDSA
 import com.ubirch.util.crypto.ecc.EccUtil
 import com.ubirch.util.crypto.hash.HashUtil
-import org.scalatest.{FeatureSpec, Matchers}
+import org.scalatest.featurespec.AnyFeatureSpec
+import org.scalatest.matchers.should.Matchers
+
 
 /**
   * author: cvandrei
   * since: 2018-03-15
   */
-class UbirchTokenUtilSpec extends FeatureSpec with Matchers {
+class UbirchTokenUtilSpec extends AnyFeatureSpec with Matchers {
 
-  feature("providerId") {
+  Feature("providerId") {
 
-    scenario("ensure value did not change") {
+    Scenario("ensure value did not change") {
       UbirchTokenUtil.providerId shouldBe "ubirchToken"
     }
 
   }
 
-  feature("delim") {
+  Feature("delim") {
 
-    scenario("ensure value did not change") {
+    Scenario("ensure value did not change") {
       UbirchTokenUtil.delim shouldBe "::"
     }
 
   }
 
-  feature("defaultSignature") {
+  Feature("defaultSignature") {
 
-    scenario("ensure value did not change") {
+    Scenario("ensure value did not change") {
       UbirchTokenUtil.defaultSignature shouldBe "to-be-specified"
     }
 
   }
 
-  feature("toUbirchToken()") {
+  Feature("toUbirchToken()") {
 
-    scenario("without private key") {
+    Scenario("without private key") {
 
       // prepare
       val context = "ubirch-local"
@@ -56,7 +57,7 @@ class UbirchTokenUtilSpec extends FeatureSpec with Matchers {
 
     }
 
-    scenario("with private key") {
+    Scenario("with private key") {
 
       // prepare
       val context = "ubirch-local"
@@ -79,9 +80,9 @@ class UbirchTokenUtilSpec extends FeatureSpec with Matchers {
 
   }
 
-  feature("hashEmail()") {
+  Feature("hashEmail()") {
 
-    scenario("hash --> sha256HexString() is applied") {
+    Scenario("hash --> sha256HexString() is applied") {
 
       // prepare
       val email = "test@ubirch.com"

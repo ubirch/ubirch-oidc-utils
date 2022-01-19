@@ -1,42 +1,43 @@
 package com.ubirch.util.oidc.util
 
 import com.ubirch.util.crypto.hash.HashUtil
-import org.scalatest.{FeatureSpec, Matchers}
+import org.scalatest.featurespec.AnyFeatureSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
   * author: cvandrei
   * since: 2017-02-10
   */
-class OidcUtilSpec extends FeatureSpec
+class OidcUtilSpec extends AnyFeatureSpec
   with Matchers {
 
-  feature("stateToHashedKey()") {
+  Feature("stateToHashedKey()") {
 
-    scenario("all strings empty") {
+    Scenario("all strings empty") {
       runStateTest("", "")
     }
 
-    scenario("provider string empty") {
+    Scenario("provider string empty") {
       runStateTest("", "123123")
     }
 
-    scenario("state string empty") {
+    Scenario("state string empty") {
       runStateTest("google", "")
     }
 
-    scenario("none of the strings empty") {
+    Scenario("none of the strings empty") {
       runStateTest("google", "123123")
     }
 
   }
 
-  feature("tokenToHashedKey()") {
+  Feature("tokenToHashedKey()") {
 
-    scenario("token string empty") {
+    Scenario("token string empty") {
       runTokenTest("")
     }
 
-    scenario("token not empty") {
+    Scenario("token not empty") {
       runTokenTest("12341234")
     }
 
