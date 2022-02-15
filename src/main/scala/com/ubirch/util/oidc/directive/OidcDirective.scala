@@ -54,10 +54,12 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
 
   val oidcToken2UserContext: Directive1[UserContext] = {
 
+    //bearer token not being used generally
     bearerToken flatMap {
 
       case None =>
 
+        //ubirch token being used generally
         ubirchToken flatMap {
 
           case None =>
@@ -164,7 +166,7 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
   @throws(classOf[AuthTokenContextError])
   @throws(classOf[TokenTimeoutError])
   @throws(classOf[ParsingError])
-  private def splitTokenAndVerifyContextAndTimestamp(ubToken: String) = {
+  private def splitTokenAndVerifyContextAndTimestamp(ubToken: String): (String, String, String, String) = {
     val split = splitToken(ubToken)
     val (externalId, timestamp) = splitSubToken(split(1))
     val context = verifyContext(split(0), externalId)

@@ -7,6 +7,7 @@ import akka.http.scaladsl.server.{AuthorizationFailedRejection, Directives, Rout
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.http.scaladsl.{Http, HttpExt}
 import com.github.sebruck.EmbeddedRedis
+import com.ubirch.util.oidc
 import com.ubirch.util.oidc.config.{OidcUtilsConfig, OidcUtilsConfigKeys}
 import com.ubirch.util.oidc.model.UserContext
 import com.ubirch.util.oidc.util.OidcUtil
