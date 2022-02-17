@@ -7,12 +7,14 @@ import akka.http.scaladsl.server.{AuthorizationFailedRejection, Directives, Rout
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.http.scaladsl.{Http, HttpExt}
 import com.github.sebruck.EmbeddedRedis
-import com.ubirch.util.oidc
+import com.ubirch.user.client.model.{Activate, Deactivate}
 import com.ubirch.util.oidc.config.{OidcUtilsConfig, OidcUtilsConfigKeys}
 import com.ubirch.util.oidc.model.UserContext
+import com.ubirch.util.oidc.testUtil.TestObjectFactory.createUser
 import com.ubirch.util.oidc.util.OidcUtil
 import com.ubirch.util.redis.RedisClientUtil
 import com.ubirch.util.redis.test.RedisCleanup
+import org.joda.time.{DateTime, DateTimeZone}
 import org.json4s.native.Serialization.write
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.featurespec.AnyFeatureSpec
@@ -130,6 +132,35 @@ class OidcDirectiveSpec extends AnyFeatureSpec with EmbeddedRedis
 
       }
 
+    }
+
+  }
+
+  Feature("checkAndUpdateActiveUserState") {
+    Scenario("date is before today and action Deactivate") {
+      val execDate = DateTime.now(DateTimeZone.UTC).minusHours(1)
+      val user = createUser(executionDate = Some(execDate), action = Some(Deactivate))
+      val updatedUser = user.copy(activeUser = false, action = None, executionDate = None)
+      oidcDirective.processActionIfNeeded(user) shouldBe Some(updatedUser)
+    }
+
+    Scenario("date is before today and action Activate") {
+      val execDate = DateTime.now(DateTimeZone.UTC).minusHours(1)
+      val user = createUser(executionDate = Some(execDate), action = Some(Activate))
+      val updatedUser = user.copy(activeUser = true, action = None, executionDate = None)
+      oidcDirective.processActionIfNeeded(user) shouldBe Some(updatedUser)
+    }
+
+    Scenario("date is after today") {
+      val execDate = DateTime.now(DateTimeZone.UTC).plusHours(1)
+      val user = createUser(executionDate = Some(execDate), action = Some(Deactivate))
+      oidcDirective.processActionIfNeeded(user) shouldBe None
+    }
+
+    Scenario("should trow error in case of internal inconsistency") {
+      val execDate = DateTime.now(DateTimeZone.UTC).minusHours(1)
+      val user = createUser(executionDate = Some(execDate))
+      assertThrows[InternalError](oidcDirective.processActionIfNeeded(user) )
     }
 
   }
