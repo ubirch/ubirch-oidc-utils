@@ -13,10 +13,11 @@ import com.ubirch.crypto.utils.Curve
 import com.ubirch.idservice.client.IdServiceClientCached
 import com.ubirch.idservice.client.model.PublicKey
 import com.ubirch.user.client.UserServiceClient
-import com.ubirch.user.client.model.User
+import com.ubirch.user.client.formats.UserFormats
+import com.ubirch.user.client.model.{Activate, Deactivate, User}
 import com.ubirch.util.config.ConfigBase
 import com.ubirch.util.http.response.ResponseUtil
-import com.ubirch.util.json.{Json4sUtil, JsonFormats}
+import com.ubirch.util.json.JsonFormats
 import com.ubirch.util.model.JsonErrorResponse
 import com.ubirch.util.oidc.config.OidcUtilsConfig
 import com.ubirch.util.oidc.model.UserContext
@@ -24,12 +25,13 @@ import com.ubirch.util.oidc.util.{OidcUtil, UbirchTokenUtil}
 import com.ubirch.util.redis.RedisClientUtil
 import org.joda.time.{DateTime, DateTimeZone}
 import org.json4s.Formats
-import org.json4s.native.Serialization.read
+import org.json4s.native.Serialization.{read, write}
 import redis.RedisClient
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.language.postfixOps
+import scala.util.{Failure, Success, Try}
 
 /**
   * author: cvandrei
@@ -39,25 +41,23 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
   with StrictLogging
   with ConfigBase {
 
-  implicit private val formatter: Formats = JsonFormats.default
-
+  implicit private val formatter: Formats = JsonFormats.default ++ UserFormats.all
   private val envid = config.getString("ubirch.envid").toLowerCase
   private val redis = RedisClientUtil.getRedisClient()
   private val refreshIntervalSeconds = OidcUtilsConfig.redisUpdateExpirySeconds()
   private val skipEnvChecking = OidcUtilsConfig.skipEnvChecking()
   private val allowInvalidSignature = OidcUtilsConfig.allowInvalidSignature()
   private val maxTokenAge = OidcUtilsConfig.maxTokenAge()
-
   val bearerToken: Directive1[Option[String]] = optionalHeaderValueByType(classOf[Authorization]).map(extractBearerToken)
-
   val ubirchToken: Directive1[Option[String]] = optionalHeaderValueByName("Authorization")
-
   val oidcToken2UserContext: Directive1[UserContext] = {
 
+    //bearer token not being used generally
     bearerToken flatMap {
 
       case None =>
 
+        //ubirch token being used generally
         ubirchToken flatMap {
 
           case None =>
@@ -116,6 +116,7 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
   @throws(classOf[ParsingError])
   @throws(classOf[TokenTimeoutError])
   @throws(classOf[UserNotFoundError])
+  @throws(classOf[InternalError])
   private def ubTokenToUserContext(ubToken: String)(implicit httpClient: HttpExt, materializer: Materializer): Future[UserContext] = {
 
     val (context, token, externalId, signature) = try {
@@ -131,8 +132,14 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
         case None =>
           UserServiceClient.userGET(providerId = UbirchTokenUtil.providerId, externalUserId = externalId).map {
 
-            case Some(user) if user.id.isDefined && user.activeUser =>
-              createAndCacheUserContext(context, externalId, user, valid, ubToken, redis)
+            case Some(user) if user.id.isDefined =>
+              val maybeUpdatedUser = checkAndUpdateActiveUserState(user)
+              if (maybeUpdatedUser.activeUser) {
+                createAndCacheUserContext(context, maybeUpdatedUser, valid, redis)
+              } else {
+                throw new UserInactiveError(s"user with id ${maybeUpdatedUser.id} is inactivated")
+              }
+
 
             case _ =>
               val msg = s"no user could be found by the user service for the externalId: $externalId"
@@ -156,6 +163,32 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
     }
   }
 
+
+
+  @throws(classOf[InternalError])
+  private def checkAndUpdateActiveUserState(user:User) : User = {
+    processActionIfNeeded(user) match {
+      case Some(updatedUser) =>
+        UserServiceClient.userPUT(updatedUser)
+          .recover( ex => logger.error("something went wrong updating user via userServiceClient ", ex))
+        updatedUser
+      case None => user
+    }
+  }
+
+  @throws(classOf[InternalError])
+  private[directive] def processActionIfNeeded(user: User): Option[User] = {
+    user.executionDate match {
+      case Some(date) if date.isBefore(DateTime.now(DateTimeZone.UTC)) =>
+        user.action match {
+          case Some(Deactivate) => Some(user.copy(activeUser = false, action = None, executionDate = None))
+          case Some(Activate) => Some(user.copy(activeUser = true, action = None, executionDate = None))
+          case None => throw new InternalError(s"inconsistent action state in user with id ${user.id}")
+        }
+      case _ => None
+    }
+  }
+
   /**
     * Method that splits the Ubirch auth token into it's different parts
     * and checks if a valid context is provided.
@@ -164,7 +197,7 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
   @throws(classOf[AuthTokenContextError])
   @throws(classOf[TokenTimeoutError])
   @throws(classOf[ParsingError])
-  private def splitTokenAndVerifyContextAndTimestamp(ubToken: String) = {
+  private def splitTokenAndVerifyContextAndTimestamp(ubToken: String): (String, String, String, String) = {
     val split = splitToken(ubToken)
     val (externalId, timestamp) = splitSubToken(split(1))
     val context = verifyContext(split(0), externalId)
@@ -247,21 +280,31 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
     }
   }
 
-  private def createAndCacheUserContext(context: String, externalId: String, user: User, hasKey: Int, ubToken: String, redis: RedisClient) = {
+  @throws(classOf[ParsingError])
+  private def createAndCacheUserContext(context: String, u: User, hasKey: Int, redis: RedisClient): UserContext = {
     val uc: UserContext = UserContext(
       context = context,
       providerId = UbirchTokenUtil.providerId,
-      externalUserId = externalId,
-      userId = user.id.get,
-      userName = user.displayName,
-      locale = user.locale,
+      externalUserId = u.externalId,
+      userId = u.id.get,
+      userName = u.displayName,
+      locale = u.locale,
       hasPubKey = hasKey
     )
-    redis.set[String](getRedisKey(externalId), Json4sUtil.any2String(uc).get, exSeconds = Some(refreshIntervalSeconds)) map {
-      case true => logger.debug(s"added successfully userContext to redis cache for externalId $externalId")
-      case _ => logger.info(s"adding userContext to redis cache for externalId $externalId failed")
+
+    Try(write[UserContext](uc)) match {
+      case Success(value)  =>
+        redis.set[String](getRedisKey({u.externalId}), value, exSeconds = Some(refreshIntervalSeconds)) map {
+          case true => logger.debug(s"added successfully userContext to redis cache for externalId ${u.externalId}")
+          case _ => logger.info(s"adding userContext to redis cache for externalId ${u.externalId} failed")
+        }
+        uc
+      case Failure(exception) =>
+        val errorMsg = s"failed parsing userContext to json before storing to cache"
+        logger.error(errorMsg, exception)
+        throw new ParsingError(errorMsg)
     }
-    uc
+
   }
 
   /**
@@ -354,12 +397,11 @@ class OidcDirective()(implicit system: ActorSystem, httpClient: HttpExt, materia
         read[UserContext](json)
     }
   }
-
   private def updateExpiry(redis: RedisClient, redisKey: String): Unit = {
 
     redis.expire(redisKey, seconds = refreshIntervalSeconds) map {
       case true => logger.debug(s"refreshed token expiry ($refreshIntervalSeconds seconds): tokenKey: $redisKey")
-      case _ => logger.info(s"failed to refresh token expiry ($refreshIntervalSeconds seconds): tokenKey: $redisKey")
+      case _ => logger.error(s"failed to refresh token expiry ($refreshIntervalSeconds seconds): tokenKey: $redisKey")
     }
   }
 
@@ -396,4 +438,4 @@ class KeyServiceError(msg: String, name: String = "key service error", errorType
 
 class UnknownValidationException(msg: String, name: String = "validation error", errorType: String = "09") extends ValidationException(msg, name, errorType)
 
-
+class UserInactiveError(msg: String, name: String = "user is inactivated", errorType: String = "10") extends ValidationException(msg, name, errorType)
